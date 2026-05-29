@@ -6,7 +6,7 @@ from config import TELEGRAM_BOT_TOKEN, TOKO_LIST
 from ocr_reader import scan_gambar
 from report_generator import generate_laporan
 
-logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
+logging.basicConfig(format="%(asctime)s %(levelname)s %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 STATE_PILIH_TOKO, STATE_PILIH_TANGGAL, STATE_SCAN_GAMBAR = range(3)
 
@@ -59,27 +59,25 @@ def format_konfirmasi(langkah, hasil):
     tipe = langkah["tipe"]
     sub = langkah["sub_key"]
     if tipe == "kassa":
-        return "Kassa {}: Rp. {}".format(sub, hasil.get("total_transaksi", "-"))
+        return "Kassa " + str(sub) + ": Rp. " + str(hasil.get("total_transaksi", "-"))
     elif tipe == "rekap_utama":
-        return "Total: Rp. {}
-Tunai: Rp. {}
-Debit: Rp. {}
-Kredit: Rp. {}".format(hasil.get("total_transaksi", "-"), hasil.get("tunai", "-"), hasil.get("debit", "-"), hasil.get("kredit", "-") or "-")
+        return "Total: Rp. " + str(hasil.get("total_transaksi", "-")) + "
+Tunai: Rp. " + str(hasil.get("tunai", "-")) + "
+Debit: Rp. " + str(hasil.get("debit", "-"))
     elif tipe == "ecer":
-        return "Ecer: Rp. {}".format(hasil.get("total_transaksi", "-"))
+        return "Ecer: Rp. " + str(hasil.get("total_transaksi", "-"))
     elif tipe == "grosir":
-        return "Grosir: Rp. {}".format(hasil.get("total_transaksi", "-"))
+        return "Grosir: Rp. " + str(hasil.get("total_transaksi", "-"))
     elif tipe == "kasir_promo":
-        return "Promo: Rp. {}
-Tunai: Rp. {}".format(hasil.get("total", "-"), hasil.get("tunai", "-"))
+        return "Promo: Rp. " + str(hasil.get("total", "-"))
     elif tipe == "parkir":
-        return "Total Parkir: Rp. {}".format(hasil.get("total_parkir", "-"))
+        return "Total Parkir: Rp. " + str(hasil.get("total_parkir", "-"))
     return ""
 
 def menu_toko():
     kb = []
     for n, t in TOKO_LIST.items():
-        kb.append([InlineKeyboardButton("{}. {}".format(n, t["nama"]), callback_data="toko_{}".format(n))])
+        kb.append([InlineKeyboardButton(str(n) + ". " + t["nama"], callback_data="toko_" + str(n))])
     kb.append([InlineKeyboardButton("Batal", callback_data="batal")])
     return InlineKeyboardMarkup(kb)
 
@@ -105,11 +103,11 @@ async def pilih_toko(update, context):
     context.user_data["laporan_data"] = {}
     context.user_data["alur"] = get_alur_scan(toko)
     context.user_data["langkah_index"] = 0
-    await q.edit_message_text("Toko: {}
+    await q.edit_message_text("Toko: " + toko["nama"] + "
 
 Masukkan tanggal laporan.
 Contoh: 29 Mei 2026
-Atau ketik: hari ini".format(toko["nama"]))
+Atau ketik: hari ini")
     return STATE_PILIH_TANGGAL
 
 async def pilih_tanggal(update, context):
@@ -117,21 +115,21 @@ async def pilih_tanggal(update, context):
     bulan = {1: "Januari", 2: "Februari", 3: "Maret", 4: "April", 5: "Mei", 6: "Juni", 7: "Juli", 8: "Agustus", 9: "September", 10: "Oktober", 11: "November", 12: "Desember"}
     if teks.lower() in ("hari ini", "today"):
         now = datetime.now()
-        tanggal = "{} {} {}".format(now.day, bulan[now.month], now.year)
+        tanggal = str(now.day) + " " + bulan[now.month] + " " + str(now.year)
     else:
         tanggal = teks
     context.user_data["tanggal"] = tanggal
     alur = context.user_data["alur"]
     toko = context.user_data["toko_config"]
-    await update.message.reply_text("Tanggal: {}
-Toko: {}
+    await update.message.reply_text("Tanggal: " + tanggal + "
+Toko: " + toko["nama"] + "
 
-Total {} gambar.
+Total " + str(len(alur)) + " gambar.
 
-Langkah 1 dari {}:
-{}
+Langkah 1 dari " + str(len(alur)) + ":
+" + alur[0]["label"] + "
 
-Kirim gambarnya sekarang...".format(tanggal, toko["nama"], len(alur), len(alur), alur[0]["label"]))
+Kirim gambarnya sekarang...")
     return STATE_SCAN_GAMBAR
 
 async def terima_gambar(update, context):
@@ -139,39 +137,39 @@ async def terima_gambar(update, context):
     index = context.user_data["langkah_index"]
     total = len(alur)
     langkah = alur[index]
-    msg = await update.message.reply_text("Memproses gambar {}/{}...".format(index + 1, total))
+    msg = await update.message.reply_text("Memproses gambar " + str(index + 1) + "/" + str(total) + "...")
     try:
         photo = update.message.photo[-1]
         file = await context.bot.get_file(photo.file_id)
         image_bytes = bytes(await file.download_as_bytearray())
         hasil = scan_gambar(image_bytes, langkah["tipe"])
         simpan_hasil(context.user_data, langkah, hasil)
-        await msg.edit_text("Gambar {}/{} berhasil!
+        await msg.edit_text("Gambar " + str(index + 1) + "/" + str(total) + " berhasil!
 
-{}".format(index + 1, total, format_konfirmasi(langkah, hasil)))
+" + format_konfirmasi(langkah, hasil))
         index += 1
         context.user_data["langkah_index"] = index
         if index < total:
-            await update.message.reply_text("Langkah {} dari {}:
-{}
+            await update.message.reply_text("Langkah " + str(index + 1) + " dari " + str(total) + ":
+" + alur[index]["label"] + "
 
-Kirim gambarnya...".format(index + 1, total, alur[index]["label"]))
+Kirim gambarnya...")
             return STATE_SCAN_GAMBAR
         else:
             await update.message.reply_text("Membuat laporan...")
             laporan = generate_laporan(context.user_data["toko_config"], context.user_data["laporan_data"], context.user_data["tanggal"])
             await update.message.reply_text("LAPORAN SELESAI!
 
-{}".format(laporan))
+" + laporan)
             kb = [[InlineKeyboardButton("Buat Laporan Toko Lain", callback_data="ulang")], [InlineKeyboardButton("Selesai", callback_data="selesai")]]
             await update.message.reply_text("Apa selanjutnya?", reply_markup=InlineKeyboardMarkup(kb))
             return STATE_PILIH_TOKO
     except Exception as e:
-        logger.error("Error: {}".format(e), exc_info=True)
+        logger.error("Error: " + str(e), exc_info=True)
         await msg.edit_text("Gagal memproses gambar.
-Error: {}
+Error: " + str(e) + "
 
-Coba kirim ulang gambar yang sama.".format(str(e)))
+Coba kirim ulang gambar yang sama.")
         return STATE_SCAN_GAMBAR
 
 async def callback_setelah_laporan(update, context):
